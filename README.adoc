@@ -5,6 +5,12 @@ This is my own implementation of image interpolation. Used for upscale (and down
 I have no initial ambitions to make this the fastest or leanest resource consuming algorithm out there.
 This project and implementations are made to explore techniques and algorithms to support texture interpolation in my raytracing endeavours as I can not use traditional algorithms or libraries on my own proprietary internal image format. (Plus I need to account for texture wrap and flipping on tiling textures.)
 
+== License
+
+https://creativecommons.org/publicdomain/zero/1.0/[CC0 - Creative Commons 0 (v1.0)]
+
+image::http://mirrors.creativecommons.org/presskit/buttons/80x15/png/cc-zero.png[CC0]
+
 == Dependencies
 
 Nope. No exotic dependencies to mention.
