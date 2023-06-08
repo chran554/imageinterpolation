@@ -7,6 +7,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
+	"strconv"
 )
 
 type ImageInterpolator struct {
@@ -67,6 +68,105 @@ func main() {
 	writeImage("result/bicubic_interpolated.png", bicubicInterpolatedImage)
 	writeImage("result/bilinear_interpolated.png", bilinearInterpolatedImage)
 	writeImage("result/nearest_interpolated.png", nearestNeighbourInterpolatedImage)
+
+	boxOriginal, err := readImage("resources/library.png")
+	if err != nil {
+		panic(err)
+	}
+
+	resizedImage0 := ResizeImage(boxOriginal, boxOriginal.Bounds().Dx(), boxOriginal.Bounds().Dy(), NewBicubicImageInterpolator())
+	resizedImage1 := ResizeImage(boxOriginal, boxOriginal.Bounds().Dx()/4, boxOriginal.Bounds().Dy()/4, NewBicubicImageInterpolator())
+	resizedImage2 := ResizeImage(boxOriginal, 473, 0, NewBicubicImageInterpolator())
+	resizedImage3 := ResizeImage(boxOriginal, 0, 473, NewBicubicImageInterpolator())
+	resizedImage4 := ResizeImage(boxOriginal, 100, 200, NewBicubicImageInterpolator())
+	resizedImage5 := ResizeImage(boxOriginal, 200, 100, NewBicubicImageInterpolator())
+	resizedImage6 := ResizeImage(boxOriginal, 473, 967, NewBicubicImageInterpolator())
+	resizedImage7 := ResizeImage(boxOriginal, 967, 473, NewBicubicImageInterpolator())
+	resizedImage8 := ResizeImage(boxOriginal, 1367, 813, NewBicubicImageInterpolator())
+	writeImage("result/resized_0.png", resizedImage0)
+	writeImage("result/resized_1.png", resizedImage1)
+	writeImage("result/resized_2.png", resizedImage2)
+	writeImage("result/resized_3.png", resizedImage3)
+	writeImage("result/resized_4.png", resizedImage4)
+	writeImage("result/resized_5.png", resizedImage5)
+	writeImage("result/resized_6.png", resizedImage6)
+	writeImage("result/resized_7.png", resizedImage7)
+	writeImage("result/resized_8.png", resizedImage8)
+
+	boxInterpolatedImage := boxOriginal
+	for boxIteration := 0; boxIteration < 4; boxIteration++ {
+		boxInterpolatedImage = boxInterpolation(2, 2, true, boxInterpolatedImage)
+		writeImage("result/box_interpolated_"+strconv.Itoa(boxIteration+1)+".png", boxInterpolatedImage)
+	}
+
+}
+
+// ResizeImage resizes an image to new dimensions (width and height).
+// One of the parameters newWidth and newHeight can be of value 0, but not both.
+// Value 0 implies that the resize should calculate that dimension of the resized image to keep
+// the original image aspect ratio between width and height.
+func ResizeImage(original img.Image, newWidth, newHeight int, imageInterpolator ImageInterpolator) *img.RGBA {
+	var resizedImage *img.RGBA
+
+	if (newWidth == 0) && (newHeight == 0) {
+		newWidth = original.Bounds().Dx()
+		newHeight = original.Bounds().Dy()
+	} else if newWidth == 0 {
+		newWidth = int(float64(original.Bounds().Dx()) * (float64(newHeight) / float64(original.Bounds().Dy())))
+	} else if newHeight == 0 {
+		newHeight = int(float64(original.Bounds().Dy()) * (float64(newWidth) / float64(original.Bounds().Dx())))
+	}
+
+	resizedImage = img.NewRGBA(img.Rect(0, 0, newWidth, newHeight))
+
+	// If we have matching bounds on our original image to the desired dimensions then return a copy of the original image.
+	if original.Bounds().Dx() == newWidth && original.Bounds().Dy() == newHeight {
+		for y := 0; y < newHeight; y++ {
+			for x := 0; x < newWidth; x++ {
+				resizedImage.Set(x, y, original.At(x, y))
+			}
+		}
+		return resizedImage
+	}
+
+	// Scale down original image to at least size of resized image (both dimensions)
+	// and at most double the size (both dimensions).
+	// If any original dimension is less than new size then it is ok but that dimension is left untouched.
+	downscale := true
+	for downscale {
+		ow := original.Bounds().Dx()
+		oh := original.Bounds().Dy()
+
+		scaleWidth := 1
+		if (ow / newWidth) >= 2 {
+			scaleWidth = 2
+		}
+
+		scaleHeight := 1
+		if (oh / newHeight) >= 2 {
+			scaleHeight = 2
+		}
+
+		downscale = (scaleWidth > 1) || (scaleHeight > 1)
+		if downscale {
+			original = boxInterpolation(scaleWidth, scaleHeight, true, original)
+		}
+	}
+
+	// If we have matching bounds on our original image to the desired dimensions then return a copy of the original image.
+	if original.Bounds().Dx() == newWidth && original.Bounds().Dy() == newHeight {
+		for y := 0; y < newHeight; y++ {
+			for x := 0; x < newWidth; x++ {
+				resizedImage.Set(x, y, original.At(x, y))
+			}
+		}
+		return resizedImage
+	}
+
+	// Interpolate the (perhaps downscaled) original to the resized image.
+	InterpolateImage(original, resizedImage, imageInterpolator)
+
+	return resizedImage
 }
 
 func InterpolateImage(original img.Image, interpolated *img.RGBA, imageInterpolator ImageInterpolator) {
@@ -79,7 +179,7 @@ func InterpolateImage(original img.Image, interpolated *img.RGBA, imageInterpola
 	dx := float64(ow) / float64(iw)
 	dy := float64(oh) / float64(ih)
 
-	for iy := 0; iy < iw; iy++ {
+	for iy := 0; iy < ih; iy++ {
 		for ix := 0; ix < iw; ix++ {
 			// The float position (fx,fy) in the original image that we want to interpolate
 			fx := float64(ix)*dx - 0.5
@@ -100,6 +200,84 @@ func InterpolateImage(original img.Image, interpolated *img.RGBA, imageInterpola
 			interpolated.Set(ix, iy, color)
 		}
 	}
+}
+
+// boxInterpolation reduces an image by a horizontal and vertical factor.
+// Destination image has a reduced width of (1.0/horizontalScaleDivisor)*original.width and a reduced height of (1.0/verticalScaleDivisor)*original.height.
+// Any scale factor of 1 will leave that image dimension unaffected.
+// Any scale factor of 0 or less is prohibited.
+//
+// Interpolation is done through taking a box of pixels (of size horizontalScaleDivisor x verticalScaleDivisor) in the original image,
+// calculate an average color and put that color on a pixel in the destination image.
+//
+// If original image dimensions width and height is not perfectly divisible by the factors
+// any remainder pixels at the right or bottom will be discarded unless you choose to set parameter perfect to true.
+// Perfect will include remainder pixels in destination image.
+func boxInterpolation(horizontalScaleDivisor, verticalScaleDivisor int, perfect bool, original img.Image) (interpolated *img.RGBA) {
+	kernel := createColorKernel(horizontalScaleDivisor, verticalScaleDivisor)
+
+	ow := original.Bounds().Dx()
+	oh := original.Bounds().Dy()
+
+	iw := ow / horizontalScaleDivisor
+	ih := oh / verticalScaleDivisor
+
+	// Prepare original image for boxing.
+	horizontalRemainder := math.Remainder(float64(ow), float64(horizontalScaleDivisor))
+	verticalRemainder := math.Remainder(float64(oh), float64(verticalScaleDivisor))
+	if perfect && ((horizontalRemainder > 0.0) || (verticalRemainder > 0.0)) {
+		interpolated := img.NewRGBA(img.Rect(0, 0, ow-int(horizontalRemainder), oh-int(verticalRemainder)))
+		InterpolateImage(original, interpolated, NewBicubicImageInterpolator())
+		original = interpolated
+	}
+
+	interpolated = img.NewRGBA(img.Rect(0, 0, iw, ih))
+
+	for iy := 0; iy < ih; iy++ {
+		for ix := 0; ix < iw; ix++ {
+			populateKernel(0, 0, kernel, ix*horizontalScaleDivisor, iy*verticalScaleDivisor, original)
+			c := boxInterpolate(kernel)
+			interpolated.Set(ix, iy, c)
+		}
+	}
+
+	return interpolated
+}
+
+func boxInterpolate(kernel [][]color.Color) color.Color {
+	var r, g, b, a uint32 = 0, 0, 0, 0
+	for x := 0; x < len(kernel); x++ {
+		for y := 0; y < len(kernel[x]); y++ {
+			// TODO de-premultiply alpha
+			dr, dg, db, da := kernel[x][y].RGBA()
+			r += dr
+			g += dg
+			b += db
+			a += da
+		}
+	}
+
+	conversion := 255.0 / float64(len(kernel)*len(kernel[0])*0xffff)
+	// TODO premultiply alpha back again
+	return color.RGBA{R: uint8(float64(r) * conversion), G: uint8(float64(g) * conversion), B: uint8(float64(b) * conversion), A: uint8(float64(a) * conversion)}
+}
+
+func createColorKernel(width int, height int) [][]color.Color {
+	kernel := make([][]color.Color, width)
+	for columnIndex := range kernel {
+		kernel[columnIndex] = make([]color.Color, height)
+	}
+
+	return kernel
+}
+
+func createFloat64Kernel(width int, height int) [][]float64 {
+	kernel := make([][]float64, width)
+	for columnIndex := range kernel {
+		kernel[columnIndex] = make([]float64, height)
+	}
+
+	return kernel
 }
 
 // https://en.wikipedia.org/wiki/Bicubic_interpolation
