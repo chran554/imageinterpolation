@@ -32,7 +32,7 @@ IMPORTANT: https://sv.wikipedia.org/wiki/WYSIWYG[WYSIWYG] - literally.
 
 Algorithms are created from scratch based on information found at wikipedia.
 
-All algorithms are working RGB space.
+All algorithms are working in RGB space.
 
 (Wikipedia is fantastic source of knowledge, if you use it more than 5 times a year consider what it saves you in time and other expenses for dictionaries, courses, and wasted time searching. https://donate.wikimedia.org/wiki/Ways_to_Give[Give them a contribution] to keep it running and open.)
 
