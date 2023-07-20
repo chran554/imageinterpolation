@@ -23,7 +23,7 @@ func Test_BicubicUpscale(t *testing.T) {
 
 	InterpolateImage(original, bicubicInterpolatedImage, NewBicubicImageInterpolator())
 
-	writeImage("../../result/bicubic_interpolated.png", bicubicInterpolatedImage)
+	writeImage("../../result/interpolated_bicubic.png", bicubicInterpolatedImage)
 }
 
 func Test_BilinearUpscale(t *testing.T) {
@@ -39,7 +39,7 @@ func Test_BilinearUpscale(t *testing.T) {
 
 	InterpolateImage(original, bilinearInterpolatedImage, NewBilinearImageInterpolator())
 
-	writeImage("../../result/bilinear_interpolated.png", bilinearInterpolatedImage)
+	writeImage("../../result/interpolated_bilinear.png", bilinearInterpolatedImage)
 }
 
 func Test_NearestNeighbourUpscale(t *testing.T) {
@@ -55,7 +55,7 @@ func Test_NearestNeighbourUpscale(t *testing.T) {
 	nearestNeighbourInterpolatedImage := img.NewRGBA(img.Rect(0, 0, newWidth, newHeight))
 
 	InterpolateImage(original, nearestNeighbourInterpolatedImage, NewNearestNeighbourInterpolator())
-	writeImage("../../result/nearest_interpolated.png", nearestNeighbourInterpolatedImage)
+	writeImage("../../result/interpolated_nearest.png", nearestNeighbourInterpolatedImage)
 }
 
 func Test_Resize(t *testing.T) {

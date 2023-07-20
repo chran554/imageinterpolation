@@ -11,15 +11,15 @@ import (
 type ImageInterpolator struct {
 	kernelX0          int
 	kernelY0          int
-	kernel            [][]color.Color
-	interpolationFunc func(float64, float64, [][]color.Color) color.Color
+	kernel            [][]*linearRGBA
+	interpolationFunc func(float64, float64, [][]*linearRGBA) color.Color
 }
 
 func NewBicubicImageInterpolator() ImageInterpolator {
 	return ImageInterpolator{
 		kernelX0:          1,
 		kernelY0:          1,
-		kernel:            [][]color.Color{{nil, nil, nil, nil}, {nil, nil, nil, nil}, {nil, nil, nil, nil}, {nil, nil, nil, nil}},
+		kernel:            createColorKernel(4, 4),
 		interpolationFunc: bicubicInterpolateColor,
 	}
 }
@@ -28,7 +28,7 @@ func NewBilinearImageInterpolator() ImageInterpolator {
 	return ImageInterpolator{
 		kernelX0:          0,
 		kernelY0:          0,
-		kernel:            [][]color.Color{{nil, nil}, {nil, nil}},
+		kernel:            createColorKernel(2, 2),
 		interpolationFunc: bilinearInterpolateColor,
 	}
 }
@@ -37,12 +37,13 @@ func NewNearestNeighbourInterpolator() ImageInterpolator {
 	return ImageInterpolator{
 		kernelX0:          0,
 		kernelY0:          0,
-		kernel:            [][]color.Color{{nil, nil}, {nil, nil}},
+		kernel:            createColorKernel(2, 2),
 		interpolationFunc: nearestNeighbourInterpolateColor,
 	}
 }
 
 // ResizeImage resizes an image to new dimensions (width and height).
+//
 // One of the parameters newWidth and newHeight can be of value 0, but not both.
 // Value 0 implies that the resize should calculate that dimension of the resized image to keep
 // the original image aspect ratio between width and height.
@@ -134,7 +135,7 @@ func InterpolateImage(original img.Image, interpolated *img.RGBA, imageInterpola
 			fdx := fx - float64(fx0)
 			fdy := fy - float64(fy0)
 
-			populateKernel(imageInterpolator.kernelX0, imageInterpolator.kernelY0, imageInterpolator.kernel, fx0, fy0, original)
+			populateKernel(imageInterpolator.kernelX0, imageInterpolator.kernelY0, imageInterpolator.kernel, fx0, fy0, original, 2.2)
 
 			color := imageInterpolator.interpolationFunc(fdx, fdy, imageInterpolator.kernel)
 
@@ -176,7 +177,7 @@ func boxInterpolation(horizontalScaleDivisor, verticalScaleDivisor int, perfect 
 
 	for iy := 0; iy < ih; iy++ {
 		for ix := 0; ix < iw; ix++ {
-			populateKernel(0, 0, kernel, ix*horizontalScaleDivisor, iy*verticalScaleDivisor, original)
+			populateKernel(0, 0, kernel, ix*horizontalScaleDivisor, iy*verticalScaleDivisor, original, 2.2)
 			c := boxInterpolate(kernel)
 			interpolated.Set(ix, iy, c)
 		}
@@ -185,7 +186,7 @@ func boxInterpolation(horizontalScaleDivisor, verticalScaleDivisor int, perfect 
 	return interpolated
 }
 
-func boxInterpolate(kernel [][]color.Color) color.Color {
+func boxInterpolate(kernel [][]*linearRGBA) color.Color {
 	var r, g, b, a uint32 = 0, 0, 0, 0
 	for x := 0; x < len(kernel); x++ {
 		for y := 0; y < len(kernel[x]); y++ {
@@ -203,26 +204,8 @@ func boxInterpolate(kernel [][]color.Color) color.Color {
 	return color.RGBA{R: uint8(float64(r) * conversion), G: uint8(float64(g) * conversion), B: uint8(float64(b) * conversion), A: uint8(float64(a) * conversion)}
 }
 
-func createColorKernel(width int, height int) [][]color.Color {
-	kernel := make([][]color.Color, width)
-	for columnIndex := range kernel {
-		kernel[columnIndex] = make([]color.Color, height)
-	}
-
-	return kernel
-}
-
-func createFloat64Kernel(width int, height int) [][]float64 {
-	kernel := make([][]float64, width)
-	for columnIndex := range kernel {
-		kernel[columnIndex] = make([]float64, height)
-	}
-
-	return kernel
-}
-
 // https://en.wikipedia.org/wiki/Bicubic_interpolation
-func bicubicInterpolateColor(fdx float64, fdy float64, kernel [][]color.Color) color.Color {
+func bicubicInterpolateColor(fdx float64, fdy float64, kernel [][]*linearRGBA) color.Color {
 	rk := [4][4]float64{}
 	gk := [4][4]float64{}
 	bk := [4][4]float64{}
@@ -280,7 +263,7 @@ func cubicHermiteSplineInterpolateValue(pn_1, pn, pn1, pn2, u float64) float64 {
 }
 
 // https://en.wikipedia.org/wiki/Nearest-neighbor_interpolation
-func nearestNeighbourInterpolateColor(fdx float64, fdy float64, kernel [][]color.Color) color.Color {
+func nearestNeighbourInterpolateColor(fdx float64, fdy float64, kernel [][]*linearRGBA) color.Color {
 	fdxlow := fdx < 0.5
 	fdylow := fdy < 0.5
 
@@ -299,7 +282,7 @@ func nearestNeighbourInterpolateColor(fdx float64, fdy float64, kernel [][]color
 }
 
 // https://en.wikipedia.org/wiki/Bilinear_interpolation
-func bilinearInterpolateColor(fdx float64, fdy float64, kernel [][]color.Color) color.Color {
+func bilinearInterpolateColor(fdx float64, fdy float64, kernel [][]*linearRGBA) color.Color {
 	// The known RGBA values for the surrounding four pixels
 	f00R, f00G, f00B, f00A := kernel[0][0].RGBA()
 	f01R, f01G, f01B, f01A := kernel[0][1].RGBA()
@@ -350,13 +333,24 @@ func bilinearInterpolateValue(fdx, fdy float64, f00, f01, f10, f11 float64) floa
 	return fxy
 }
 
-func populateKernel(kx0 int, ky0 int, kernel [][]color.Color, fx0 int, fy0 int, image img.Image) {
+func createColorKernel(width int, height int) [][]*linearRGBA {
+	kernel := make([][]*linearRGBA, width)
+
+	for columnIndex := range kernel {
+		kernel[columnIndex] = make([]*linearRGBA, height)
+	}
+
+	return kernel
+}
+
+func populateKernel(kx0 int, ky0 int, kernel [][]*linearRGBA, fx0 int, fy0 int, image img.Image, gamma float64) {
 	iw := image.Bounds().Dx()
 	ih := image.Bounds().Dy()
 
 	for x := 0; x < len(kernel); x++ {
 		for y := 0; y < len(kernel[x]); y++ {
-			kernel[x][y] = image.At(clamp(fx0+(x-kx0), 0, iw-1), clamp(fy0+(y-ky0), 0, ih-1))
+			pixelColor := image.At(clamp(fx0+(x-kx0), 0, iw-1), clamp(fy0+(y-ky0), 0, ih-1))
+			kernel[x][y] = newLinearRGBA(pixelColor, gamma)
 		}
 	}
 }
@@ -379,4 +373,57 @@ func clampFloat64(x, min, max float64) float64 {
 		return max
 	}
 	return x
+}
+
+// linearRGBA
+//
+// https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
+type linearRGBA struct {
+	gamma      float64
+	c          *color.Color
+	R, G, B, A float64
+}
+
+// RGBA
+//
+// https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
+func (lRGBA *linearRGBA) RGBA() (r, g, b, a uint32) {
+	if lRGBA.c == nil || true { // TODO check if c is already calculated (not nil), if so, do not redo this calculation
+		invGamma := 1.0 / lRGBA.gamma
+		premultiplyAlphaConstant := lRGBA.A
+		c := color.Color(color.RGBA{
+			R: uint8(clampFloat64(gammaCalculation(lRGBA.R*premultiplyAlphaConstant, invGamma)*255.0, 0.0, 255.0)),
+			G: uint8(clampFloat64(gammaCalculation(lRGBA.G*premultiplyAlphaConstant, invGamma)*255.0, 0.0, 255.0)),
+			B: uint8(clampFloat64(gammaCalculation(lRGBA.B*premultiplyAlphaConstant, invGamma)*255.0, 0.0, 255.0)),
+			A: uint8(clampFloat64(lRGBA.A*255.0, 0.0, 255.0)),
+		})
+
+		lRGBA.c = &c
+	}
+
+	return (*lRGBA.c).RGBA()
+}
+
+// newLinearRGBA
+//
+// https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
+func newLinearRGBA(c color.Color, gamma float64) *linearRGBA {
+	r, g, b, a := c.RGBA()
+
+	const conversionConstant = 1.0 / float64(0xffff)
+	depremultiplyAlphaConstant := 1.0 / (float64(a) * conversionConstant)
+	linearColor := &linearRGBA{
+		gamma: gamma,
+		c:     &c,
+		R:     gammaCalculation(float64(r)*conversionConstant*depremultiplyAlphaConstant, gamma),
+		G:     gammaCalculation(float64(g)*conversionConstant*depremultiplyAlphaConstant, gamma),
+		B:     gammaCalculation(float64(b)*conversionConstant*depremultiplyAlphaConstant, gamma),
+		A:     float64(a) * conversionConstant,
+	}
+
+	return linearColor
+}
+
+func gammaCalculation(value float64, gamma float64) float64 {
+	return math.Pow(value, gamma)
 }

@@ -11,6 +11,8 @@ https://creativecommons.org/publicdomain/zero/1.0/[CC0 - Creative Commons 0 (v1.
 
 image::http://mirrors.creativecommons.org/presskit/buttons/80x15/png/cc-zero.png[CC0]
 
+It is not a requirement by the license, but if you do improve the code then any feedback or pull request is very appreciated. Sharing is caring.
+
 == Dependencies
 
 Nope. No exotic dependencies to mention.
@@ -20,7 +22,7 @@ This library applies to the vanilla images as provided by the standard go librar
 == TODO
 
 * Make sure all calculations are made on alpha and not premultiplied color values.
-* Make sure to calculate all interpolation is done in linear space not gamma space.
+* Implement sRGB gamma calculation (not plain gamma 2.2)
 
 == Testing
 
@@ -33,6 +35,8 @@ IMPORTANT: https://sv.wikipedia.org/wiki/WYSIWYG[WYSIWYG] - literally.
 Algorithms are created from scratch based on information found at wikipedia.
 
 All algorithms are working in RGB space.
+
+All interpolation calculations are made in linear RGB space. Gamma of 2.2 is assumed for original image.
 
 (Wikipedia is fantastic source of knowledge, if you use it more than 5 times a year consider what it saves you in time and other expenses for dictionaries, courses, and wasted time searching. https://donate.wikimedia.org/wiki/Ways_to_Give[Give them a contribution] to keep it running and open.)
 
